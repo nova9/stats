@@ -340,9 +340,23 @@ open class Window: NSStackView {
     
     @objc private func listenForToggleView(_ notification: Notification) {
         guard let moduleName = notification.userInfo?["module"], self.config.name == moduleName as? String else { return }
+        if let showSettings = notification.userInfo?["showSettings"] as? Bool {
+            self.previewView?.isHidden = showSettings
+            self.settingsView?.isHidden = self.previewView != nil && !showSettings
+            return
+        }
         self.toggleView()
     }
+
+    public var isShowingSettings: Bool {
+        self.settingsView?.isHidden == false
+    }
     
+    public func showSettings() {
+        self.previewView?.isHidden = true
+        self.settingsView?.isHidden = false
+    }
+
     private func toggleView() {
         if let preview = self.previewView {
             preview.isHidden = !preview.isHidden

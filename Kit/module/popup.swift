@@ -408,12 +408,12 @@ internal class HeaderView: NSStackView {
         settings.bezelStyle = .regularSquare
         settings.translatesAutoresizingMaskIntoConstraints = false
         settings.imageScaling = .scaleNone
-        settings.image = iconFromSymbol(name: "command", scale: .large)
+        settings.image = iconFromSymbol(name: "gear", scale: .medium)
         settings.contentTintColor = .lightGray
         settings.isBordered = false
         settings.action = #selector(self.openSettings)
         settings.target = self
-        settings.toolTip = localizedString("Open module")
+        settings.toolTip = localizedString("Open module settings")
         settings.focusRingType = .none
         
         self.addArrangedSubview(activity)
@@ -459,7 +459,7 @@ internal class HeaderView: NSStackView {
         }
         
         button.action = #selector(self.openActivityMonitor)
-        button.image = iconFromSymbol(name: "chart.bar.fill", scale: .medium)
+        button.image = iconFromSymbol(name: "waveform.path.ecg", scale: .medium)
         button.toolTip = localizedString("Open Activity Monitor")
     }
     
@@ -482,7 +482,7 @@ internal class HeaderView: NSStackView {
     }
     
     @objc func openSettings() {
-        NotificationCenter.default.post(name: .toggleSettings, object: nil, userInfo: ["module": self.title])
+        NotificationCenter.default.post(name: .toggleSettings, object: nil, userInfo: ["module": self.title, "showSettings": true])
     }
     
     @objc private func closePopup() {

@@ -449,7 +449,7 @@ internal class NameView: NSStackView {
         nameField.title = name
         nameField.cell?.truncatesLastVisibleLine = true
         
-        let detailsButton = PopupButton(toolTip: localizedString("Disk details"), state: self.detailsState) { [weak self] in
+        let detailsButton = PopupButton(toolTip: localizedString("Disk details"), state: self.detailsState, icon: "info.circle") { [weak self] in
             self?.detailsCallback()
         }
         

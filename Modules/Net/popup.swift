@@ -289,7 +289,7 @@ internal class Popup: PopupWrapper {
         
         view.addArrangedSubview(SeparatorView(
             label: localizedString("Interface"),
-            button: PopupButton(toolTip: localizedString("Details"), state: interfaceDetailsState) { [weak self] in
+            button: PopupButton(toolTip: localizedString("Details"), state: interfaceDetailsState, icon: "info.circle") { [weak self] in
                 self?.toggleInterfaceDetails()
             }
         ))

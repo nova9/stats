@@ -154,9 +154,9 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
         switch itemIdentifier {
         case .previewButton:
-            let button = SettingsPreviewButton { [weak self] in
+            let button = ModuleViewSelector { [weak self] showSettings in
                 guard let moduleName = self?.activeModuleName else { return }
-                NotificationCenter.default.post(name: .togglePreview, object: nil, userInfo: ["module": moduleName])
+                NotificationCenter.default.post(name: .togglePreview, object: nil, userInfo: ["module": moduleName, "showSettings": showSettings])
             }
             self.settingsPreviewButton = button
             
@@ -191,7 +191,7 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
         return [.flexibleSpace, .previewButton, .toggleButton]
     }
     
-    internal func open(module: String? = nil) {
+    internal func open(module: String? = nil, showSettings: Bool = false) {
         if !self.isVisible {
             self.setIsVisible(true)
             self.makeKeyAndOrderFront(nil)
@@ -203,10 +203,29 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
         if var name = module {
             if name == "Combined modules" { name = "Dashboard" }
             self.sidebarView.openMenu(name)
+            if showSettings, let selectedModule = modules.first(where: { $0.config.name == name }) {
+                selectedModule.window?.showSettings()
+                (self.settingsPreviewButton as? ModuleViewSelector)?.setSettingsEnabled(true)
+            }
         }
         self.updateReaderVisibility()
     }
     
+    private func updateToolbar(showModule: Bool, showSelector: Bool) {
+        guard let toolbar = self.toolbar else { return }
+        for (identifier, visible) in [(NSToolbarItem.Identifier.previewButton, showSelector), (.toggleButton, showModule)] {
+            let index = toolbar.items.firstIndex(where: { $0.itemIdentifier == identifier })
+            if !visible, let index {
+                toolbar.removeItem(at: index)
+            } else if visible, index == nil {
+                let insertionIndex = identifier == .previewButton
+                    ? (toolbar.items.firstIndex(where: { $0.itemIdentifier == .toggleButton }) ?? toolbar.items.count)
+                    : toolbar.items.count
+                toolbar.insertItem(withItemIdentifier: identifier, at: insertionIndex)
+            }
+        }
+    }
+
     @objc private func menuCallback(_ notification: Notification) {
         if let title = notification.userInfo?["module"] as? String {
             var view: NSView = NSView()
@@ -215,20 +234,18 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
                     view = v
                 }
                 self.activeModuleName = detectedModule.config.name
+                self.updateToolbar(showModule: true, showSelector: detectedModule.config.hasPreview)
                 toggleNSControlState(self.toggleButton, state: detectedModule.enabled ? .on : .off)
-                self.toggleButton?.isHidden = false
-                self.settingsPreviewButton?.isHidden = !detectedModule.config.hasPreview
+                (self.settingsPreviewButton as? ModuleViewSelector)?.setSettingsEnabled(detectedModule.window?.isShowingSettings ?? false)
             } else if title == "Dashboard" {
                 self.activeModuleName = nil
                 view = self.dashboard
-                self.toggleButton?.isHidden = true
-                self.settingsPreviewButton?.isHidden = true
+                self.updateToolbar(showModule: false, showSelector: false)
             } else if title == "Settings" {
                 self.activeModuleName = nil
                 self.settings.viewWillAppear()
                 view = self.settings
-                self.toggleButton?.isHidden = true
-                self.settingsPreviewButton?.isHidden = true
+                self.updateToolbar(showModule: false, showSelector: false)
             }
             
             self.title = localizedString(title)
@@ -575,62 +592,34 @@ private class MenuItem: NSView {
     }
 }
 
-private class SettingsPreviewButton: NSStackView {
-    private var callback: () -> Void
-    
-    private var settingsIcon: NSImage { iconFromSymbol(name: "gear", scale: .large) }
-    private var previewIcon: NSImage { iconFromSymbol(name: "command", scale: .large) }
-    
-    private var button: NSButton? = nil
-    private var isSettingsEnabled: Bool = false
-    
-    fileprivate init(callback: @escaping () -> Void) {
+private class ModuleViewSelector: NSSegmentedControl {
+    private let callback: (Bool) -> Void
+
+    fileprivate init(callback: @escaping (Bool) -> Void) {
         self.callback = callback
-        
         super.init(frame: .zero)
-        
-        self.translatesAutoresizingMaskIntoConstraints = false
-        self.edgeInsets = NSEdgeInsets(
-            top: Constants.Settings.margin,
-            left: Constants.Settings.margin,
-            bottom: Constants.Settings.margin,
-            right: Constants.Settings.margin
-        )
-        self.spacing = Constants.Settings.margin
-        
-        let button = NSButton()
-        button.toolTip = localizedString("Open module settings")
-        button.bezelStyle = .regularSquare
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.imageScaling = .scaleNone
-        button.image = self.settingsIcon
-        button.contentTintColor = .secondaryLabelColor
-        button.isBordered = false
-        button.action = #selector(self.action)
-        button.target = self
-        button.focusRingType = .none
-        button.widthAnchor.constraint(equalToConstant: Constants.Widget.height).isActive = true
-        self.button = button
-        
-        self.addArrangedSubview(button)
+
+        self.segmentCount = 2
+        self.setLabel(localizedString("Overview"), forSegment: 0)
+        self.setLabel(localizedString("Settings"), forSegment: 1)
+        self.trackingMode = .selectOne
+        self.segmentStyle = .rounded
+        self.selectedSegment = 0
+        self.target = self
+        self.action = #selector(selectModuleView)
+        self.setAccessibilityLabel(localizedString("Module view"))
+        self.sizeToFit()
     }
-    
+
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
-    
-    @objc private func action() {
-        guard let button = self.button else { return }
-        self.callback()
-        
-        self.isSettingsEnabled = !self.isSettingsEnabled
-        
-        if self.isSettingsEnabled {
-            button.image = self.previewIcon
-            button.toolTip = localizedString("Close module settings")
-        } else {
-            button.image = self.settingsIcon
-            button.toolTip = localizedString("Open module settings")
-        }
+
+    @objc private func selectModuleView() {
+        self.callback(self.selectedSegment == 1)
+    }
+
+    fileprivate func setSettingsEnabled(_ enabled: Bool) {
+        self.selectedSegment = enabled ? 1 : 0
     }
 }
